@@ -49,6 +49,7 @@ double distance(double x1, double y1, double x2, double y2)
 {
 	return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
 }
+
 int ClosestWaypoint(double x, double y, const vector<double> &maps_x, const vector<double> &maps_y)
 {
 
@@ -65,7 +66,6 @@ int ClosestWaypoint(double x, double y, const vector<double> &maps_x, const vect
 			closestLen = dist;
 			closestWaypoint = i;
 		}
-
 	}
 
 	return closestWaypoint;
@@ -186,7 +186,7 @@ int getLane(double d)
 	return -1;
 }
 
-void cars_state_check(vector<vector<double>> sensor_fusion, int lane, double car_s, int prev_size, bool & car_ahead, bool & car_left, bool & car_right, double & car_ahead_speed){
+void prediction(vector<vector<double>> sensor_fusion, int lane, double car_s, int prev_size, bool & car_ahead, bool & car_left, bool & car_right, bool & car_far_left, bool & car_far_right, double & car_ahead_speed){
   for (int i = 0; i < sensor_fusion.size(); i++) {
     float check_car_d = sensor_fusion[i][6];
     int car_lane = getLane(check_car_d);
@@ -215,32 +215,43 @@ void cars_state_check(vector<vector<double>> sensor_fusion, int lane, double car
         car_left = true;
       }
     }
+    else if (car_lane - lane == -2) {
+      if ((check_car_s > car_s && check_car_s - car_s < 10) || (check_car_s < car_s && car_s - check_car_s < 10)) {
+        car_far_left = true;
+      }
+    }
     else if (car_lane - lane == 1) {
       if((check_car_s >car_s && check_car_s-car_s < 35) || (check_car_s < car_s && car_s-check_car_s < 10)){
         car_right = true;
       }
     }
+    else if (car_lane - lane == 2) {
+      if ((check_car_s > car_s && check_car_s - car_s < 10) || (check_car_s < car_s && car_s - check_car_s < 10)) {
+        car_far_right = true;
+      }
+    }
   }
 }
 
-void behavior_planning(bool car_ahead, bool car_left, bool car_right, double ref_vel, int & lane, double & speed_diff){
+void behavior_planner(bool car_ahead, bool car_left, bool car_right, bool car_far_left, bool car_far_right, double ref_vel, int & lane, double & speed_diff){
   if (car_ahead) { // Car ahead
     if (!car_left && lane > 0) {
       // if there is no car left and there is a left lane.
-      lane--; // Change lane left.
+      lane--; // Change lane left
     } else if (!car_right && lane < NUMBER_OF_LANES - 1){
       // if there is no car right and there is a right lane.
-      lane++; // Change lane right.
+      lane++; // Change lane right
     } else {
       speed_diff -= MAX_ACC;
     }
-  } else {
-    if (lane != 1) { // if we are not on the center lane. // Adapt for the case NUMBER_OF_LANES > 3
-      if (lane == 0 && !car_right){
-        lane = 1; // Back to center.
+  } else { // No car ahead
+    // Adapt for the case NUMBER_OF_LANES > 3
+    if (lane != 1) { // if we are not on the center lane.
+      if (lane == 0 && !car_right && !car_far_right){
+        lane = 1; // Back to center
       }
-      else if (lane == 2 && !car_left){
-        lane = 1; // Back to center.
+      else if (lane == 2 && !car_left && !car_far_left){
+        lane = 1; // Back to center
       }
     }
     if (ref_vel < MAX_SPEED) {
@@ -461,12 +472,14 @@ int main() {
             bool car_ahead = false;
             bool car_left = false;
             bool car_right = false;
+            bool car_far_left = false;
+            bool car_far_right = false;
             double car_ahead_speed = 0.0;
-            cars_state_check(sensor_fusion, lane, car_s, prev_size, car_ahead, car_left, car_right, car_ahead_speed);
+            prediction(sensor_fusion, lane, car_s, prev_size, car_ahead, car_left, car_right, car_far_left, car_far_right,car_ahead_speed);
 
             // Behavior : Let's see what to do.
             double speed_diff = 0;
-            behavior_planning(car_ahead, car_left, car_right, ref_vel, lane, speed_diff);
+            behavior_planner(car_ahead, car_left, car_right, car_far_left, car_far_right, ref_vel, lane, speed_diff);
 
             // Define the actual (x,y) points we will be using for the planner
             vector<double> next_x_vals;
